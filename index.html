@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Polla Mundialista – Login</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h2>⚽ Polla Mundialista</h2>
+      <p class="small">Inicia sesión con tu correo. Te llegará un link (magic link).</p>
+      <div class="row">
+        <input id="email" type="email" placeholder="tu@correo.com" style="min-width:260px" />
+        <button id="btn">Enviar link</button>
+      </div>
+      <p id="msg" class="small"></p>
+      <hr />
+      <p class="small">
+        Ranking público: <a href="./public.html">abrir</a>
+      </p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { getSession, signInWithMagicLink } from "./js/auth.js";
+
+    const msg = document.getElementById("msg");
+    const btn = document.getElementById("btn");
+    const email = document.getElementById("email");
+
+    const session = await getSession();
+    if (session) window.location.href = "./app.html";
+
+    btn.onclick = async () => {
+      msg.textContent = "";
+      const val = email.value.trim();
+      if (!val) { msg.textContent = "Escribe tu correo."; return; }
+      btn.disabled = true;
+      try {
+        await signInWithMagicLink(val);
+        msg.textContent = "Listo. Revisa tu correo y abre el link para entrar.";
+      } catch (e) {
+        msg.textContent = "Error: " + (e?.message ?? e);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
