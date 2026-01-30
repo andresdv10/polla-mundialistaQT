@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Polla Mundialista – Admin</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>🛠 Panel Admin</h2>
+        <div class="row">
+          <a href="./app.html" class="badge">Volver a la app</a>
+          <button id="logout" class="secondary">Salir</button>
+        </div>
+      </div>
+      <p id="who" class="small"></p>
+    </div>
+
+    <div class="grid-2" style="margin-top:12px">
+      <div class="card">
+        <h3>Ingresar resultados</h3>
+        <div class="row">
+          <label class="small">Fase</label>
+          <select id="stage">
+            <option value="grupos">grupos</option>
+            <option value="octavos">octavos</option>
+            <option value="cuartos">cuartos</option>
+            <option value="semis">semis</option>
+            <option value="final">final</option>
+          </select>
+          <button id="reload" class="secondary">Recargar</button>
+        </div>
+        <div id="matches" class="small" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h3>Administrar admins</h3>
+        <p class="small">Selecciona un usuario y conviértelo en admin (requiere que tú ya seas admin).</p>
+        <div id="users" class="small"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/admin.js"></script>
+</body>
+</html>
