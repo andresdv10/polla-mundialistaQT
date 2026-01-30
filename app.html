@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Polla Mundialista – App</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="row">
+      <div class="card" style="flex:1">
+        <h2>⚽ Polla Mundialista</h2>
+        <div class="row">
+          <span id="who" class="badge"></span>
+          <a href="./public.html" class="badge">Ranking público</a>
+          <a id="adminLink" href="./admin.html" class="badge" style="display:none">Panel Admin</a>
+          <button id="logout" class="secondary">Salir</button>
+        </div>
+        <p id="note" class="small"></p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Mis predicciones</h3>
+
+        <div class="row">
+          <label class="small">Fase</label>
+          <select id="stage">
+            <option value="grupos">grupos</option>
+            <option value="octavos">octavos</option>
+            <option value="cuartos">cuartos</option>
+            <option value="semis">semis</option>
+            <option value="final">final</option>
+          </select>
+          <button id="reload" class="secondary">Recargar</button>
+        </div>
+
+        <div id="list" class="small" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h3>Tabla (privada)</h3>
+        <p class="small">Esta tabla usa los datos internos. El ranking público está en <code>public.html</code>.</p>
+        <div id="leader" class="small"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
