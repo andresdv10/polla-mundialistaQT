@@ -379,14 +379,26 @@ const myName = (profile?.display_name || "").trim();
             </tr>
           </thead>
           <tbody>
-            ${data.map((r, i) => `
-              <tr style="border-top:1px solid rgba(255,255,255,.10)">
-                <td style="padding:8px 6px">${i + 1}</td>
-                <td style="padding:8px 6px">${escapeHtml(r.display_name ?? "Jugador")}</td>
-                <td style="padding:8px 6px">${r.points_total ?? 0}</td>
-                <td style="padding:8px 6px">${r.exact_count ?? 0}</td>
-              </tr>
-            `).join("")}
+           ${data.map((r, i) => {
+  const name = (r.display_name ?? "Jugador").trim();
+  const isMe = myName && name.toLowerCase() === myName.toLowerCase();
+
+  return `
+    <tr style="
+      border-top:1px solid rgba(255,255,255,.10);
+      ${isMe ? "background:rgba(255,255,255,.06); outline:1px solid rgba(120,180,255,.35);" : ""}
+    ">
+      <td style="padding:8px 6px">${i + 1}</td>
+      <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">
+        ${escapeHtml(name)}
+        ${isMe ? ` <span class="badge" style="margin-left:6px">Tú</span>` : ""}
+      </td>
+      <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">${r.points_total ?? 0}</td>
+      <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">${r.exact_count ?? 0}</td>
+    </tr>
+  `;
+}).join("")}
+
           </tbody>
         </table>
       </div>
