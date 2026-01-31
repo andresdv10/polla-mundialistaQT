@@ -13,10 +13,14 @@
       <div class="card" style="flex:1">
         <h2>🛠️ Panel Admin</h2>
 
-        <div class="row">
+        <div class="row" style="flex-wrap:wrap; gap:10px">
           <span id="who" class="badge"></span>
           <a href="./app.html" class="badge">Volver a App</a>
           <a href="./public.html" class="badge">Ranking público</a>
+
+          <!-- NUEVO -->
+          <button id="refreshBoard" class="secondary">Actualizar ranking</button>
+
           <button id="logout" class="secondary">Salir</button>
         </div>
 
@@ -45,7 +49,7 @@
           <p><strong>Eliminación:</strong> si hay empate, elige <code>winner_team</code> (ganador). Si no hay empate, se deja vacío.</p>
           <hr style="opacity:.2">
           <p class="small" style="opacity:.8">
-            Nota: el campo <code>qualified_team</code> lo manejaremos después (automático o manual). Por ahora basta con
+            Nota: el campo <code>qualified_team</code> lo manejaremos después. Por ahora basta con
             guardar marcador y ganador si aplica.
           </p>
         </div>
