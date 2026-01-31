@@ -2,53 +2,60 @@ import { sb } from "./supabaseClient.js";
 
 const $ = (id) => document.getElementById(id);
 
-// UI
+// IDs del DOM (según tu app.html)
 const who = $("who");
 const adminLink = $("adminLink");
 const logoutBtn = $("logout");
 const note = $("note");
+
 const stageSel = $("stage");
 const reloadBtn = $("reload");
 const listDiv = $("list");
 const leaderDiv = $("leader");
 
-// Modal name
+// Modal nombre
 const nameModal = $("nameModal");
 const nameInput = $("nameInput");
 const saveNameBtn = $("saveNameBtn");
 const nameErr = $("nameErr");
 
 let session = null;
+let profile = null;
 
 (async function main() {
   try {
-    // 1) obtener sesión
     session = await getSessionOrRedirect();
 
-    // Mostrar UUID SIEMPRE (esto te desbloquea lo de admin)
-    note.style.color = "";
+    profile = await ensureProfile(session.user.id);
+
+    // Pedir nombre si no tiene o quedó "Jugador"
+    let displayName = (profile.display_name || "").trim();
+    if (!displayName || displayName.toLowerCase() === "jugador") {
+      displayName = await askNameAndSave();
+      profile.display_name = displayName;
+    }
+
+    // Header
+    who.textContent = `${profile.display_name} · ${profile.role}`;
     note.textContent = `Tu UUID (user.id): ${session.user.id}`;
 
-    // 2) asegurar perfil + nombre
-    const prof = await ensureProfileAndName(session);
+    // Link admin solo si admin
+    if (profile.role === "admin") adminLink.style.display = "";
+    else adminLink.style.display = "none";
 
-    // UI header
-    who.textContent = `${prof.display_name} · ${prof.role}`;
-    adminLink.style.display = (prof.role === "admin") ? "inline-block" : "none";
-
-    // listeners
+    // Eventos
     logoutBtn.addEventListener("click", onLogout);
-    reloadBtn.addEventListener("click", () => refreshMatches());
-    stageSel.addEventListener("change", () => refreshMatches());
+    reloadBtn.addEventListener("click", refresh);
+    stageSel.addEventListener("change", refresh);
 
-    // 3) cargar fases reales desde BD (sin suponer "grupos")
+    // Cargar fases disponibles desde DB
     await loadStagesFromDB();
 
-    // 4) cargar partidos de la fase seleccionada
-    await refreshMatches();
+    // Render inicial
+    await refresh();
 
-    // tabla privada placeholder por ahora
-    leaderDiv.innerHTML = `<p class="small">Tabla privada: la conectamos después de que el flujo esté estable.</p>`;
+    // Tabla privada (opcional, por ahora dejamos texto)
+    leaderDiv.innerHTML = `<div class="small" style="opacity:.85">Tabla privada: la conectamos después (ranking público está en public.html).</div>`;
   } catch (e) {
     showError(e);
   }
@@ -59,11 +66,10 @@ let session = null;
 async function getSessionOrRedirect() {
   const { data, error } = await sb.auth.getSession();
   if (error) throw error;
-
   const s = data?.session;
   if (!s) {
     window.location.href = "./index.html";
-    throw new Error("Sin sesión. Redirigiendo a login.");
+    throw new Error("Sin sesión, redirigiendo…");
   }
   return s;
 }
@@ -73,63 +79,38 @@ async function onLogout() {
   window.location.href = "./index.html";
 }
 
-/* ---------------- Profile + Nombre ---------------- */
+/* ---------------- Profile ---------------- */
 
-async function ensureProfileAndName(session) {
-  // 1) intentar leer perfil
-  let prof = await getMyProfile(session.user.id);
-
-  // 2) si no existe, crearlo (esto es clave)
-  if (!prof) {
-    await createMyProfileIfMissing(session.user.id);
-    prof = await getMyProfile(session.user.id);
-  }
-
-  if (!prof) {
-    // si todavía no existe, casi seguro es RLS bloqueando
-    throw new Error("No pude leer/crear tu perfil. Esto suele ser por políticas RLS en public.profiles.");
-  }
-
-  // 3) si no tiene nombre o es Jugador, pedirlo
-  const dn = (prof.display_name || "").trim();
-  if (!dn || dn.toLowerCase() === "jugador") {
-    const newName = await askNameAndSave(session);
-    prof.display_name = newName;
-  }
-
-  return prof;
-}
-
-async function getMyProfile(userId) {
-  const { data, error } = await sb
+async function ensureProfile(userId) {
+  // 1) intentar leer
+  let { data, error } = await sb
     .from("profiles")
     .select("id, display_name, role")
     .eq("id", userId)
     .maybeSingle();
 
-  // maybeSingle devuelve null si no hay fila, sin error
   if (error) throw error;
-  return data || null;
-}
 
-async function createMyProfileIfMissing(userId) {
-  // Insert mínimo. Si ya existe, no pasa nada (upsert).
-  const { error } = await sb
-    .from("profiles")
-    .upsert({ id: userId, display_name: "Jugador", role: "player" }, { onConflict: "id" });
+  // 2) si no existe, crear
+  if (!data) {
+    const ins = await sb
+      .from("profiles")
+      .insert({ id: userId, display_name: "Jugador", role: "player" })
+      .select("id, display_name, role")
+      .single();
 
-  if (error) throw error;
-}
-
-async function askNameAndSave(session) {
-  if (!nameModal || !nameInput || !saveNameBtn || !nameErr) {
-    throw new Error("Falta el modal de nombre en app.html (IDs: nameModal/nameInput/saveNameBtn/nameErr).");
+    if (ins.error) throw ins.error;
+    data = ins.data;
   }
 
+  return data;
+}
+
+async function askNameAndSave() {
   nameErr.textContent = "";
-  nameInput.value = "";
   nameModal.style.display = "block";
-  setTimeout(() => nameInput.focus(), 50);
+  nameInput.value = "";
+  nameInput.focus();
 
   return await new Promise((resolve) => {
     const cleanup = () => {
@@ -153,18 +134,16 @@ async function askNameAndSave(session) {
 
       saveNameBtn.disabled = true;
       try {
-        const cleanName = name.trim();
-
         const { error } = await sb
           .from("profiles")
-          .update({ display_name: cleanName })
+          .update({ display_name: name.trim() })
           .eq("id", session.user.id);
 
         if (error) throw error;
 
         nameModal.style.display = "none";
         cleanup();
-        resolve(cleanName);
+        resolve(name.trim());
       } catch (e) {
         nameErr.textContent = "Error guardando nombre: " + (e?.message ?? e);
       } finally {
@@ -179,10 +158,9 @@ async function askNameAndSave(session) {
   });
 }
 
-/* ---------------- Matches ---------------- */
+/* ---------------- Matches + Predictions ---------------- */
 
 async function loadStagesFromDB() {
-  // Trae stages reales
   const { data, error } = await sb
     .from("matches")
     .select("stage")
@@ -192,13 +170,13 @@ async function loadStagesFromDB() {
 
   const stages = [...new Set((data || []).map(r => r.stage).filter(Boolean))];
 
-  stageSel.innerHTML = "";
-  if (stages.length === 0) {
-    stageSel.innerHTML = `<option value="">(sin partidos)</option>`;
-    return;
-  }
+  // fallback si por alguna razón está vacío
+  const fallback = ["grupos", "octavos", "cuartos", "semis", "final"];
 
-  for (const st of stages) {
+  const list = stages.length ? stages : fallback;
+
+  stageSel.innerHTML = "";
+  for (const st of list) {
     const opt = document.createElement("option");
     opt.value = st;
     opt.textContent = st;
@@ -206,54 +184,157 @@ async function loadStagesFromDB() {
   }
 }
 
-async function refreshMatches() {
+async function refresh() {
   try {
-    listDiv.innerHTML = "";
+    listDiv.innerHTML = `<div class="small" style="opacity:.8">Cargando…</div>`;
+    note.style.color = "";
+
     const stage = stageSel.value;
 
-    if (!stage) {
-      listDiv.innerHTML = `<p class="small">No hay fases disponibles (tabla matches vacía o sin permiso de lectura).</p>`;
-      return;
-    }
-
-    const { data, error } = await sb
+    // 1) traer partidos de la fase
+    const { data: matches, error: mErr } = await sb
       .from("matches")
-      .select("id, stage, match_number, team_home, team_away, kickoff_time")
+      .select("id, stage, match_number, team_home, team_away, kickoff_time, status, score_home, score_away, winner_team")
       .eq("stage", stage)
       .order("kickoff_time", { ascending: true });
 
-    if (error) throw error;
+    if (mErr) throw mErr;
 
-    if (!data || data.length === 0) {
-      listDiv.innerHTML = `<p class="small">No hay partidos para la fase: <strong>${escapeHtml(stage)}</strong>.</p>`;
+    if (!matches || matches.length === 0) {
+      listDiv.innerHTML = `<div class="small">No hay partidos para <strong>${escapeHtml(stage)}</strong>.</div>`;
       return;
     }
 
-    listDiv.innerHTML = data.map(renderMatchCard).join("");
+    // 2) traer mis predicciones de esos partidos
+    const matchIds = matches.map(m => m.id);
+
+    const { data: preds, error: pErr } = await sb
+      .from("predictions")
+      .select("match_id, score_home, score_away")
+      .in("match_id", matchIds);
+
+    if (pErr) throw pErr;
+
+    const predMap = new Map((preds || []).map(p => [p.match_id, p]));
+
+    // 3) render
+    listDiv.innerHTML = matches.map(m => renderMatchWithPrediction(m, predMap.get(m.id))).join("");
+
+    // 4) wire eventos guardar
+    wirePredictionEvents();
   } catch (e) {
     showError(e);
   }
 }
 
-function renderMatchCard(m) {
+function renderMatchWithPrediction(m, pred) {
   const dt = m.kickoff_time
     ? new Date(m.kickoff_time).toLocaleString("es-CO", { timeZone: "America/Bogota" })
     : "—";
 
+  const ph = pred?.score_home ?? "";
+  const pa = pred?.score_away ?? "";
+
+  const locked = (m.status === "finished"); // si ya terminó, no se edita (puedes cambiar esto luego)
+  const disabledAttr = locked ? "disabled" : "";
+
+  const officialLine = (m.status === "finished" && m.score_home !== null && m.score_away !== null)
+    ? `<div class="small" style="opacity:.85">Resultado oficial: <strong>${m.score_home} - ${m.score_away}</strong></div>`
+    : `<div class="small" style="opacity:.75">Status: ${escapeHtml(m.status ?? "scheduled")}</div>`;
+
   return `
-    <div class="card" style="margin-top:10px">
-      <div class="row" style="justify-content:space-between; gap:12px; align-items:center">
-        <div>
-          <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
-          <div class="small">${dt} · <span class="badge">${escapeHtml(m.stage)}</span></div>
+    <div class="card" style="margin-top:12px" data-match-id="${m.id}">
+      <div>
+        <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
+        <div class="small">${dt} · <span class="badge">${escapeHtml(m.stage)}</span></div>
+        ${officialLine}
+      </div>
+
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap; align-items:flex-end">
+        <div style="min-width:130px">
+          <div class="small">${escapeHtml(m.team_home)}</div>
+          <input class="ph" type="number" min="0" step="1" value="${escapeAttr(ph)}" placeholder="0" ${disabledAttr}/>
         </div>
-        <div class="badge">—</div>
+
+        <div style="min-width:130px">
+          <div class="small">${escapeHtml(m.team_away)}</div>
+          <input class="pa" type="number" min="0" step="1" value="${escapeAttr(pa)}" placeholder="0" ${disabledAttr}/>
+        </div>
+
+        <button class="savePred" ${disabledAttr}>Guardar</button>
+        <span class="msg small" style="opacity:.85"></span>
       </div>
-      <div class="small" style="opacity:.8; margin-top:8px">
-        (Marcadores/edición van en el panel Admin; primero estabilizamos nombre + carga)
-      </div>
+
+      ${locked ? `<div class="small" style="opacity:.7; margin-top:6px">Predicción bloqueada (partido finalizado).</div>` : ``}
     </div>
   `;
+}
+
+function wirePredictionEvents() {
+  const cards = Array.from(listDiv.querySelectorAll("[data-match-id]"));
+  for (const card of cards) {
+    const btn = card.querySelector(".savePred");
+    if (!btn) continue;
+    btn.addEventListener("click", () => savePrediction(card));
+  }
+}
+
+async function savePrediction(card) {
+  const matchId = parseInt(card.getAttribute("data-match-id"), 10);
+  const phEl = card.querySelector(".ph");
+  const paEl = card.querySelector(".pa");
+  const msgEl = card.querySelector(".msg");
+  const btn = card.querySelector(".savePred");
+
+  msgEl.textContent = "";
+  msgEl.style.color = "";
+
+  const phRaw = phEl.value;
+  const paRaw = paEl.value;
+
+  const score_home = phRaw === "" ? null : parseInt(phRaw, 10);
+  const score_away = paRaw === "" ? null : parseInt(paRaw, 10);
+
+  // validar
+  if (score_home === null || score_away === null) {
+    msgEl.textContent = "Pon ambos marcadores para guardar.";
+    msgEl.style.color = "#ffb3b3";
+    return;
+  }
+  if (Number.isNaN(score_home) || score_home < 0 || Number.isNaN(score_away) || score_away < 0) {
+    msgEl.textContent = "Marcadores inválidos (solo enteros >= 0).";
+    msgEl.style.color = "#ffb3b3";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Guardando…";
+
+  try {
+    // Upsert por unique(user_id, match_id)
+    const { error } = await sb
+      .from("predictions")
+      .upsert(
+        {
+          user_id: session.user.id,
+          match_id: matchId,
+          score_home,
+          score_away
+        },
+        { onConflict: "user_id,match_id" }
+      );
+
+    if (error) throw error;
+
+    msgEl.textContent = "Guardado ✅";
+    msgEl.style.color = "#b6f7c1";
+  } catch (e) {
+    msgEl.textContent = "Error guardando: " + (e?.message ?? e);
+    msgEl.style.color = "#ffb3b3";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Guardar";
+  }
 }
 
 /* ---------------- Utils ---------------- */
@@ -272,4 +353,8 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(s) {
+  return escapeHtml(String(s));
 }
