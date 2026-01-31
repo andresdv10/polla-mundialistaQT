@@ -167,7 +167,7 @@ async function loadStagesFromDB() {
   if (error) throw error;
 
   const stages = [...new Set((data || []).map(r => r.stage).filter(Boolean))];
-  const fallback = ["grupos", "octavos", "cuartos", "semis", "final"];
+const fallback = ["grupos", "r32", "r16", "cuartos", "semis", "final"];
   const list = stages.length ? stages : fallback;
 
   stageSel.innerHTML = "";
