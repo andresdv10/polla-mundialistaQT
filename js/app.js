@@ -334,6 +334,7 @@ async function savePrediction(card) {
 }
 async function renderPrivateBoard() {
   leaderDiv.innerHTML = `<div class="small" style="opacity:.8">Cargando tabla…</div>`;
+const myName = (profile?.display_name || "").trim();
 
   try {
     const { data, error } = await sb
