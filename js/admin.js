@@ -5,13 +5,13 @@ const $ = (id) => document.getElementById(id);
 // UI
 const who = $("who");
 const logoutBtn = $("logout");
+const refreshBoardBtn = $("refreshBoard"); // nuevo
 const note = $("note");
 const stageSel = $("stage");
 const reloadBtn = $("reload");
 const listDiv = $("list");
 
 let session = null;
-let isAdmin = false;
 
 (async function main() {
   try {
@@ -20,10 +20,7 @@ let isAdmin = false;
     // validar admin
     const prof = await getMyProfile(session.user.id);
     if (!prof) throw new Error("No existe tu perfil (profiles).");
-    isAdmin = (prof.role === "admin");
-    if (!isAdmin) {
-      throw new Error("Acceso denegado: tu usuario no es admin.");
-    }
+    if (prof.role !== "admin") throw new Error("Acceso denegado: tu usuario no es admin.");
 
     who.textContent = `${prof.display_name || "Admin"} · admin`;
     note.textContent = `Tu UUID: ${session.user.id}`;
@@ -31,6 +28,9 @@ let isAdmin = false;
     logoutBtn.addEventListener("click", onLogout);
     reloadBtn.addEventListener("click", refreshMatches);
     stageSel.addEventListener("change", refreshMatches);
+
+    // nuevo: refrescar ranking cache
+    refreshBoardBtn.addEventListener("click", onRefreshPublicBoard);
 
     await loadStagesFromDB();
     await refreshMatches();
@@ -66,6 +66,41 @@ async function getMyProfile(userId) {
 
   if (error) throw error;
   return data || null;
+}
+
+/* ---------------- Public board refresh ---------------- */
+
+async function onRefreshPublicBoard() {
+  note.style.color = "";
+  const prev = note.textContent;
+  note.textContent = "Actualizando ranking público…";
+
+  refreshBoardBtn.disabled = true;
+  refreshBoardBtn.textContent = "Actualizando…";
+
+  try {
+    // RPC (función SQL) que ya creaste
+    const { error } = await sb.rpc("refresh_public_leaderboard_cache");
+    if (error) throw error;
+
+    note.textContent = "Ranking actualizado ✅ (revisa public.html)";
+    note.style.color = "#b6f7c1";
+  } catch (e) {
+    note.textContent = "Error actualizando ranking: " + (e?.message ?? e);
+    note.style.color = "#ffb3b3";
+    console.error(e);
+  } finally {
+    refreshBoardBtn.disabled = false;
+    refreshBoardBtn.textContent = "Actualizar ranking";
+
+    // si quieres, volver al texto anterior después de 4s
+    setTimeout(() => {
+      if (note.textContent?.startsWith("Ranking actualizado")) {
+        note.textContent = prev || "";
+        note.style.color = "";
+      }
+    }, 4000);
+  }
 }
 
 /* ---------------- Stages / Matches ---------------- */
@@ -122,7 +157,7 @@ async function refreshMatches() {
     }
 
     listDiv.innerHTML = data.map(renderAdminMatchRow).join("");
-    wireRowEvents(); // activar botones save
+    wireRowEvents();
   } catch (e) {
     showError(e);
   }
@@ -140,9 +175,6 @@ function renderAdminMatchRow(m) {
   const st = (m.status ?? "scheduled");
   const wt = (m.winner_team ?? "");
 
-  // Dropdown winner solo útil en eliminación. Aquí lo mostramos siempre, pero lo validamos:
-  // - si empate -> requerido
-  // - si no empate -> lo limpiamos
   const winnerOptions = `
     <option value="">(sin ganador)</option>
     <option value="${escapeAttr(m.team_home)}"${wt === m.team_home ? " selected" : ""}>${escapeHtml(m.team_home)}</option>
@@ -150,7 +182,7 @@ function renderAdminMatchRow(m) {
   `;
 
   return `
-    <div class="card" style="margin-top:12px" data-id="${m.id}">
+    <div class="card" style="margin-top:12px" data-id="${m.id}" data-home="${escapeAttr(m.team_home)}" data-away="${escapeAttr(m.team_away)}">
       <div class="row" style="justify-content:space-between; gap:10px; align-items:center">
         <div>
           <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
@@ -202,6 +234,9 @@ function wireRowEvents() {
 
 async function saveRow(card) {
   const id = card.getAttribute("data-id");
+  const home = card.getAttribute("data-home");
+  const away = card.getAttribute("data-away");
+
   const shEl = card.querySelector(".sh");
   const saEl = card.querySelector(".sa");
   const stEl = card.querySelector(".st");
@@ -220,7 +255,7 @@ async function saveRow(card) {
   const status = stEl.value || "scheduled";
   let winner_team = (wtEl.value || "").trim();
 
-  // Validaciones
+  // Validaciones básicas
   if (score_home !== null && (Number.isNaN(score_home) || score_home < 0)) {
     msgEl.textContent = "Score local inválido.";
     msgEl.style.color = "#ffb3b3";
@@ -232,36 +267,48 @@ async function saveRow(card) {
     return;
   }
 
-  // Si status finished, exigir marcador completo
+  // finished => exigir ambos
   if (status === "finished") {
     if (score_home === null || score_away === null) {
       msgEl.textContent = "Si el partido está finished, debes poner ambos marcadores.";
       msgEl.style.color = "#ffb3b3";
       return;
     }
-  }
-
-  // Si hay marcadores y NO hay empate, winner_team debe ir vacío
-  if (score_home !== null && score_away !== null && score_home !== score_away) {
+  } else {
+    // si NO finished, winner no tiene sentido
     winner_team = "";
     wtEl.value = "";
   }
 
-  // Si hay empate y está finished, winner_team es requerido (para eliminación).
-  // No sabemos aquí si es eliminación o grupos, así que lo dejamos como:
-  // - Si empate + finished y el admin eligió ganador -> ok
-  // - Si empate + finished y NO eligió ganador -> advertir (pero permitir guardar)
-  // Puedes endurecer esto después.
-  if (status === "finished" && score_home !== null && score_away !== null && score_home === score_away && !winner_team) {
-    msgEl.textContent = "Empate: si es eliminación, selecciona ganador (winner_team). Guardaré igual.";
-    msgEl.style.color = "#ffd28a";
+  // Si finished y hay marcadores:
+  if (status === "finished" && score_home !== null && score_away !== null) {
+    if (score_home !== score_away) {
+      // NO empate: winner_team se limpia (según tu regla)
+      winner_team = "";
+      wtEl.value = "";
+    } else {
+      // empate: si no eligió ganador, advertimos (pero guardamos)
+      if (!winner_team) {
+        msgEl.textContent = "Empate: si es eliminación, selecciona ganador (winner_team). Guardaré igual.";
+        msgEl.style.color = "#ffd28a";
+      } else if (winner_team !== home && winner_team !== away) {
+        msgEl.textContent = "Ganador inválido (debe ser local o visitante).";
+        msgEl.style.color = "#ffb3b3";
+        return;
+      }
+    }
   }
 
   btn.disabled = true;
   btn.textContent = "Guardando…";
 
   try {
-    const payload = { score_home, score_away, status, winner_team: (winner_team || null) };
+    const payload = {
+      score_home,
+      score_away,
+      status,
+      winner_team: winner_team || null
+    };
 
     const { error } = await sb
       .from("matches")
