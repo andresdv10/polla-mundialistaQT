@@ -319,6 +319,13 @@ async function saveRow(card) {
 
     msgEl.textContent = "Guardado ✅";
     msgEl.style.color = "#b6f7c1";
+    // Si quedó finished, recalcula ranking público (cache)
+if (status === "finished") {
+  const r = await sb.rpc("refresh_public_leaderboard_cache");
+  // Si falla, no tumbamos el guardado; solo lo avisamos
+  if (r.error) console.warn("No se pudo refrescar leaderboard cache:", r.error);
+}
+
   } catch (e) {
     msgEl.textContent = "Error guardando: " + (e?.message ?? e);
     msgEl.style.color = "#ffb3b3";
