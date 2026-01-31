@@ -12,31 +12,49 @@ const reloadBtn = $("reload");
 const listDiv = $("list");
 const leaderDiv = $("leader");
 
-// Estado
+// Modal name
+const nameModal = $("nameModal");
+const nameInput = $("nameInput");
+const saveNameBtn = $("saveNameBtn");
+const nameErr = $("nameErr");
+
 let session = null;
 
 (async function main() {
   try {
-    // 1) session
+    // 1) obtener sesión
     session = await getSessionOrRedirect();
 
-    // 2) profile (y forzar nombre)
-    await ensureProfile(session);
+    // Mostrar UUID SIEMPRE (esto te desbloquea lo de admin)
+    note.style.color = "";
+    note.textContent = `Tu UUID (user.id): ${session.user.id}`;
+
+    // 2) asegurar perfil + nombre
+    const prof = await ensureProfileAndName(session);
+
+    // UI header
+    who.textContent = `${prof.display_name} · ${prof.role}`;
+    adminLink.style.display = (prof.role === "admin") ? "inline-block" : "none";
 
     // listeners
     logoutBtn.addEventListener("click", onLogout);
-    reloadBtn.addEventListener("click", refreshMatches);
-    stageSel.addEventListener("change", refreshMatches);
+    reloadBtn.addEventListener("click", () => refreshMatches());
+    stageSel.addEventListener("change", () => refreshMatches());
 
-    // 3) carga inicial
+    // 3) cargar fases reales desde BD (sin suponer "grupos")
+    await loadStagesFromDB();
+
+    // 4) cargar partidos de la fase seleccionada
     await refreshMatches();
-    renderLeaderPlaceholder();
 
-    note.textContent = "";
+    // tabla privada placeholder por ahora
+    leaderDiv.innerHTML = `<p class="small">Tabla privada: la conectamos después de que el flujo esté estable.</p>`;
   } catch (e) {
     showError(e);
   }
 })();
+
+/* ---------------- Auth ---------------- */
 
 async function getSessionOrRedirect() {
   const { data, error } = await sb.auth.getSession();
@@ -55,43 +73,68 @@ async function onLogout() {
   window.location.href = "./index.html";
 }
 
-async function ensureProfile(session) {
-  const { data: prof, error } = await sb
-    .from("profiles")
-    .select("id, display_name, role")
-    .eq("id", session.user.id)
-    .single();
+/* ---------------- Profile + Nombre ---------------- */
 
-  if (error) throw error;
+async function ensureProfileAndName(session) {
+  // 1) intentar leer perfil
+  let prof = await getMyProfile(session.user.id);
 
-  let displayName = (prof.display_name || "").trim();
-  if (!displayName || displayName.toLowerCase() === "jugador") {
-    displayName = await askNameAndSave(session);
+  // 2) si no existe, crearlo (esto es clave)
+  if (!prof) {
+    await createMyProfileIfMissing(session.user.id);
+    prof = await getMyProfile(session.user.id);
   }
 
-  who.textContent = `${displayName} · ${prof.role}`;
-  adminLink.style.display = (prof.role === "admin") ? "inline-block" : "none";
+  if (!prof) {
+    // si todavía no existe, casi seguro es RLS bloqueando
+    throw new Error("No pude leer/crear tu perfil. Esto suele ser por políticas RLS en public.profiles.");
+  }
+
+  // 3) si no tiene nombre o es Jugador, pedirlo
+  const dn = (prof.display_name || "").trim();
+  if (!dn || dn.toLowerCase() === "jugador") {
+    const newName = await askNameAndSave(session);
+    prof.display_name = newName;
+  }
+
+  return prof;
+}
+
+async function getMyProfile(userId) {
+  const { data, error } = await sb
+    .from("profiles")
+    .select("id, display_name, role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  // maybeSingle devuelve null si no hay fila, sin error
+  if (error) throw error;
+  return data || null;
+}
+
+async function createMyProfileIfMissing(userId) {
+  // Insert mínimo. Si ya existe, no pasa nada (upsert).
+  const { error } = await sb
+    .from("profiles")
+    .upsert({ id: userId, display_name: "Jugador", role: "player" }, { onConflict: "id" });
+
+  if (error) throw error;
 }
 
 async function askNameAndSave(session) {
-  const modal = $("nameModal");
-  const input = $("nameInput");
-  const btn = $("saveNameBtn");
-  const err = $("nameErr");
-
-  if (!modal || !input || !btn || !err) {
+  if (!nameModal || !nameInput || !saveNameBtn || !nameErr) {
     throw new Error("Falta el modal de nombre en app.html (IDs: nameModal/nameInput/saveNameBtn/nameErr).");
   }
 
-  modal.style.display = "block";
-  err.textContent = "";
-  input.value = "";
-  setTimeout(() => input.focus(), 50);
+  nameErr.textContent = "";
+  nameInput.value = "";
+  nameModal.style.display = "block";
+  setTimeout(() => nameInput.focus(), 50);
 
   return await new Promise((resolve) => {
     const cleanup = () => {
-      btn.onclick = null;
-      input.onkeydown = null;
+      saveNameBtn.onclick = null;
+      nameInput.onkeydown = null;
     };
 
     const validate = (name) => {
@@ -103,12 +146,12 @@ async function askNameAndSave(session) {
     };
 
     const submit = async () => {
-      err.textContent = "";
-      const name = input.value;
+      nameErr.textContent = "";
+      const name = nameInput.value;
       const msg = validate(name);
-      if (msg) { err.textContent = msg; return; }
+      if (msg) { nameErr.textContent = msg; return; }
 
-      btn.disabled = true;
+      saveNameBtn.disabled = true;
       try {
         const cleanName = name.trim();
 
@@ -119,31 +162,60 @@ async function askNameAndSave(session) {
 
         if (error) throw error;
 
-        modal.style.display = "none";
+        nameModal.style.display = "none";
         cleanup();
         resolve(cleanName);
       } catch (e) {
-        err.textContent = "Error guardando nombre: " + (e?.message ?? e);
+        nameErr.textContent = "Error guardando nombre: " + (e?.message ?? e);
       } finally {
-        btn.disabled = false;
+        saveNameBtn.disabled = false;
       }
     };
 
-    btn.onclick = submit;
-    input.onkeydown = (ev) => {
+    saveNameBtn.onclick = submit;
+    nameInput.onkeydown = (ev) => {
       if (ev.key === "Enter") submit();
     };
   });
 }
 
+/* ---------------- Matches ---------------- */
+
+async function loadStagesFromDB() {
+  // Trae stages reales
+  const { data, error } = await sb
+    .from("matches")
+    .select("stage")
+    .order("stage", { ascending: true });
+
+  if (error) throw error;
+
+  const stages = [...new Set((data || []).map(r => r.stage).filter(Boolean))];
+
+  stageSel.innerHTML = "";
+  if (stages.length === 0) {
+    stageSel.innerHTML = `<option value="">(sin partidos)</option>`;
+    return;
+  }
+
+  for (const st of stages) {
+    const opt = document.createElement("option");
+    opt.value = st;
+    opt.textContent = st;
+    stageSel.appendChild(opt);
+  }
+}
+
 async function refreshMatches() {
   try {
     listDiv.innerHTML = "";
-    note.textContent = "";
+    const stage = stageSel.value;
 
-    const stage = stageSel.value; // usa exactamente lo que tengas en el select: grupos/octavos/...
+    if (!stage) {
+      listDiv.innerHTML = `<p class="small">No hay fases disponibles (tabla matches vacía o sin permiso de lectura).</p>`;
+      return;
+    }
 
-    // SOLO columnas confirmadas que existen:
     const { data, error } = await sb
       .from("matches")
       .select("id, stage, match_number, team_home, team_away, kickoff_time")
@@ -153,7 +225,7 @@ async function refreshMatches() {
     if (error) throw error;
 
     if (!data || data.length === 0) {
-      listDiv.innerHTML = `<p class="small">No hay partidos para la fase <strong>${escapeHtml(stage)}</strong>.</p>`;
+      listDiv.innerHTML = `<p class="small">No hay partidos para la fase: <strong>${escapeHtml(stage)}</strong>.</p>`;
       return;
     }
 
@@ -178,20 +250,13 @@ function renderMatchCard(m) {
         <div class="badge">—</div>
       </div>
       <div class="small" style="opacity:.8; margin-top:8px">
-        (Marcador real y puntos se verán cuando carguemos la parte de resultados/admin)
+        (Marcadores/edición van en el panel Admin; primero estabilizamos nombre + carga)
       </div>
     </div>
   `;
 }
 
-function renderLeaderPlaceholder() {
-  leaderDiv.innerHTML = `
-    <p class="small">
-      Tabla privada: pendiente de conectar a tu vista/cache real.
-      (Primero dejemos estable: login + nombre + lista de partidos)
-    </p>
-  `;
-}
+/* ---------------- Utils ---------------- */
 
 function showError(e) {
   const msg = e?.message ?? String(e);
