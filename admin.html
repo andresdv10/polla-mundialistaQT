@@ -6,40 +6,49 @@
   <title>Polla Mundialista – Admin</title>
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
+
 <body>
   <div class="container">
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <h2>🛠 Panel Admin</h2>
+    <div class="row">
+      <div class="card" style="flex:1">
+        <h2>🛠️ Panel Admin</h2>
+
         <div class="row">
-          <a href="./app.html" class="badge">Volver a la app</a>
+          <span id="who" class="badge"></span>
+          <a href="./app.html" class="badge">Volver a App</a>
+          <a href="./public.html" class="badge">Ranking público</a>
           <button id="logout" class="secondary">Salir</button>
         </div>
+
+        <p id="note" class="small"></p>
       </div>
-      <p id="who" class="small"></p>
     </div>
 
-    <div class="grid-2" style="margin-top:12px">
+    <div class="grid-2">
       <div class="card">
-        <h3>Ingresar resultados</h3>
+        <h3>Editar resultados</h3>
+
         <div class="row">
           <label class="small">Fase</label>
-          <select id="stage">
-            <option value="grupos">grupos</option>
-            <option value="octavos">octavos</option>
-            <option value="cuartos">cuartos</option>
-            <option value="semis">semis</option>
-            <option value="final">final</option>
-          </select>
+          <select id="stage"></select>
           <button id="reload" class="secondary">Recargar</button>
         </div>
-        <div id="matches" class="small" style="margin-top:10px"></div>
+
+        <div id="list" class="small" style="margin-top:12px"></div>
       </div>
 
       <div class="card">
-        <h3>Administrar admins</h3>
-        <p class="small">Selecciona un usuario y conviértelo en admin (requiere que tú ya seas admin).</p>
-        <div id="users" class="small"></div>
+        <h3>Ayuda rápida</h3>
+        <div class="small">
+          <p><strong>Marcador:</strong> se guarda como <code>score_home</code> y <code>score_away</code> (90').</p>
+          <p><strong>Status:</strong> <code>scheduled</code> / <code>finished</code>.</p>
+          <p><strong>Eliminación:</strong> si hay empate, elige <code>winner_team</code> (ganador). Si no hay empate, se deja vacío.</p>
+          <hr style="opacity:.2">
+          <p class="small" style="opacity:.8">
+            Nota: el campo <code>qualified_team</code> lo manejaremos después (automático o manual). Por ahora basta con
+            guardar marcador y ganador si aplica.
+          </p>
+        </div>
       </div>
     </div>
   </div>
