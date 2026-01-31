@@ -53,7 +53,7 @@ let profile = null;
     await refresh();
 
     // Tabla privada (placeholder)
-    leaderDiv.innerHTML = `<div class="small" style="opacity:.85">Tabla privada: la conectamos después (ranking público está en public.html).</div>`;
+    await renderPrivateBoard();
   } catch (e) {
     showError(e);
   }
