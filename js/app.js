@@ -333,7 +333,7 @@ async function savePrediction(card) {
   }
 }
 async function renderPrivateBoard() {
-  leaderDiv.innerHTML = `<div class="small" style="opacity:.8">Cargando tabla…</div>`;
+leaderDiv.innerHTML = "";
 const myName = (profile?.display_name || "").trim();
 
   try {
