@@ -241,7 +241,7 @@ function renderMatchWithPrediction(m, pred) {
   return `
     <div class="card" style="margin-top:12px" data-match-id="${m.id}">
       <div>
-        <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
+<div><strong>${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
         <div class="small">${dt} · <span class="badge">${escapeHtml(m.stage)}</span></div>
         ${officialLine}
       </div>
