@@ -75,7 +75,9 @@ async function getSessionOrRedirect() {
 }
 
 async function onLogout() {
-  try { await sb.auth.signOut(); } catch (_) {}
+  try {
+    await sb.auth.signOut();
+  } catch (_) {}
   window.location.href = "./index.html";
 }
 
@@ -130,7 +132,10 @@ async function askNameAndSave() {
       nameErr.textContent = "";
       const name = nameInput.value;
       const msg = validate(name);
-      if (msg) { nameErr.textContent = msg; return; }
+      if (msg) {
+        nameErr.textContent = msg;
+        return;
+      }
 
       saveNameBtn.disabled = true;
       try {
@@ -168,7 +173,7 @@ async function loadStagesFromDB() {
 
   if (error) throw error;
 
-  const stages = [...new Set((data || []).map(r => r.stage).filter(Boolean))];
+  const stages = [...new Set((data || []).map((r) => r.stage).filter(Boolean))];
 
   // fallback si por alguna razón está vacío
   const fallback = ["grupos", "octavos", "cuartos", "semis", "final"];
@@ -194,31 +199,37 @@ async function refresh() {
     // 1) traer partidos de la fase
     const { data: matches, error: mErr } = await sb
       .from("matches")
-      .select("id, stage, match_number, team_home, team_away, kickoff_time, status, score_home, score_away, winner_team")
+      .select(
+        "id, stage, match_number, team_home, team_away, kickoff_time, status, score_home, score_away, winner_team"
+      )
       .eq("stage", stage)
       .order("kickoff_time", { ascending: true });
 
     if (mErr) throw mErr;
 
     if (!matches || matches.length === 0) {
-      listDiv.innerHTML = `<div class="small">No hay partidos para <strong>${escapeHtml(stage)}</strong>.</div>`;
+      listDiv.innerHTML = `<div class="small">No hay partidos para <strong>${escapeHtml(
+        stage
+      )}</strong>.</div>`;
       return;
     }
 
-    // 2) traer mis predicciones de esos partidos
-    const matchIds = matches.map(m => m.id);
+    // 2) traer mis predicciones de esos partidos (✅ columnas correctas)
+    const matchIds = matches.map((m) => m.id);
 
     const { data: preds, error: pErr } = await sb
       .from("predictions")
-      .select("match_id, score_home, score_away")
+      .select("match_id, pred_home, pred_away")
       .in("match_id", matchIds);
 
     if (pErr) throw pErr;
 
-    const predMap = new Map((preds || []).map(p => [p.match_id, p]));
+    const predMap = new Map((preds || []).map((p) => [p.match_id, p]));
 
     // 3) render
-    listDiv.innerHTML = matches.map(m => renderMatchWithPrediction(m, predMap.get(m.id))).join("");
+    listDiv.innerHTML = matches
+      .map((m) => renderMatchWithPrediction(m, predMap.get(m.id)))
+      .join("");
 
     // 4) wire eventos guardar
     wirePredictionEvents();
@@ -229,43 +240,61 @@ async function refresh() {
 
 function renderMatchWithPrediction(m, pred) {
   const dt = m.kickoff_time
-    ? new Date(m.kickoff_time).toLocaleString("es-CO", { timeZone: "America/Bogota" })
+    ? new Date(m.kickoff_time).toLocaleString("es-CO", {
+        timeZone: "America/Bogota",
+      })
     : "—";
 
-  const ph = pred?.score_home ?? "";
-  const pa = pred?.score_away ?? "";
+  // ✅ usar pred_home / pred_away
+  const ph = pred?.pred_home ?? "";
+  const pa = pred?.pred_away ?? "";
 
-  const locked = (m.status === "finished"); // si ya terminó, no se edita (puedes cambiar esto luego)
+  const locked = m.status === "finished"; // si ya terminó, no se edita (puedes cambiar esto luego)
   const disabledAttr = locked ? "disabled" : "";
 
-  const officialLine = (m.status === "finished" && m.score_home !== null && m.score_away !== null)
-    ? `<div class="small" style="opacity:.85">Resultado oficial: <strong>${m.score_home} - ${m.score_away}</strong></div>`
-    : `<div class="small" style="opacity:.75">Status: ${escapeHtml(m.status ?? "scheduled")}</div>`;
+  const officialLine =
+    m.status === "finished" && m.score_home !== null && m.score_away !== null
+      ? `<div class="small" style="opacity:.85">Resultado oficial: <strong>${m.score_home} - ${m.score_away}</strong></div>`
+      : `<div class="small" style="opacity:.75">Status: ${escapeHtml(
+          m.status ?? "scheduled"
+        )}</div>`;
 
   return `
     <div class="card" style="margin-top:12px" data-match-id="${m.id}">
       <div>
-        <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
-        <div class="small">${dt} · <span class="badge">${escapeHtml(m.stage)}</span></div>
+        <div><strong>#${m.match_number ?? ""} ${escapeHtml(
+    m.team_home
+  )} vs ${escapeHtml(m.team_away)}</strong></div>
+        <div class="small">${dt} · <span class="badge">${escapeHtml(
+    m.stage
+  )}</span></div>
         ${officialLine}
       </div>
 
       <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap; align-items:flex-end">
         <div style="min-width:130px">
           <div class="small">${escapeHtml(m.team_home)}</div>
-          <input class="ph" type="number" min="0" step="1" value="${escapeAttr(ph)}" placeholder="0" ${disabledAttr}/>
+          <input class="ph" type="number" min="0" step="1" value="${escapeAttr(
+            ph
+          )}" placeholder="0" ${disabledAttr}/>
         </div>
 
         <div style="min-width:130px">
           <div class="small">${escapeHtml(m.team_away)}</div>
-          <input class="pa" type="number" min="0" step="1" value="${escapeAttr(pa)}" placeholder="0" ${disabledAttr}/>
+          <input class="pa" type="number" min="0" step="1" value="${escapeAttr(
+            pa
+          )}" placeholder="0" ${disabledAttr}/>
         </div>
 
         <button class="savePred" ${disabledAttr}>Guardar</button>
         <span class="msg small" style="opacity:.85"></span>
       </div>
 
-      ${locked ? `<div class="small" style="opacity:.7; margin-top:6px">Predicción bloqueada (partido finalizado).</div>` : ``}
+      ${
+        locked
+          ? `<div class="small" style="opacity:.7; margin-top:6px">Predicción bloqueada (partido finalizado).</div>`
+          : ``
+      }
     </div>
   `;
 }
@@ -292,16 +321,21 @@ async function savePrediction(card) {
   const phRaw = phEl.value;
   const paRaw = paEl.value;
 
-  const score_home = phRaw === "" ? null : parseInt(phRaw, 10);
-  const score_away = paRaw === "" ? null : parseInt(paRaw, 10);
+  const pred_home = phRaw === "" ? null : parseInt(phRaw, 10);
+  const pred_away = paRaw === "" ? null : parseInt(paRaw, 10);
 
   // validar
-  if (score_home === null || score_away === null) {
+  if (pred_home === null || pred_away === null) {
     msgEl.textContent = "Pon ambos marcadores para guardar.";
     msgEl.style.color = "#ffb3b3";
     return;
   }
-  if (Number.isNaN(score_home) || score_home < 0 || Number.isNaN(score_away) || score_away < 0) {
+  if (
+    Number.isNaN(pred_home) ||
+    pred_home < 0 ||
+    Number.isNaN(pred_away) ||
+    pred_away < 0
+  ) {
     msgEl.textContent = "Marcadores inválidos (solo enteros >= 0).";
     msgEl.style.color = "#ffb3b3";
     return;
@@ -311,15 +345,15 @@ async function savePrediction(card) {
   btn.textContent = "Guardando…";
 
   try {
-    // Upsert por unique(user_id, match_id)
+    // ✅ Upsert por unique(user_id, match_id)
     const { error } = await sb
       .from("predictions")
       .upsert(
         {
           user_id: session.user.id,
           match_id: matchId,
-          score_home,
-          score_away
+          pred_home,
+          pred_away,
         },
         { onConflict: "user_id,match_id" }
       );
