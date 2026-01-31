@@ -1,44 +1,95 @@
 import { sb } from "./supabaseClient.js";
 
-const board = document.getElementById("board");
-const updated = document.getElementById("updated");
+const $ = (id) => document.getElementById(id);
+
+const listDiv = $("publicList");
+const note = $("notePublic");
+const refreshBtn = $("refreshPublic"); // opcional, si existe
+
+(async function main() {
+  try {
+    if (refreshBtn) refreshBtn.addEventListener("click", load);
+    await load();
+  } catch (e) {
+    showError(e);
+  }
+})();
 
 async function load() {
-  board.textContent = "Cargando...";
-  const { data, error } = await sb
-    .from("public_leaderboard_cache")
-    .select("display_name, points_total, exact_count, result_count, one_team_goals_count, qualified_count, updated_at")
-    .order("points_total", { ascending: false })
-    .order("exact_count", { ascending: false })
-    .order("result_count", { ascending: false })
-    .order("one_team_goals_count", { ascending: false })
-    .order("qualified_count", { ascending: false })
-    .order("display_name", { ascending: true });
+  try {
+    if (note) { note.textContent = ""; note.style.color = ""; }
+    if (listDiv) listDiv.innerHTML = `<div class="small" style="opacity:.8">Cargando…</div>`;
 
-  if (error) { board.textContent = "Error: " + error.message; return; }
+    const { data, error } = await sb
+      .from("public_leaderboard_cache")
+      .select("display_name, points_total, exact_count, updated_at")
+      .order("points_total", { ascending: false })
+      .order("exact_count", { ascending: false })
+      .order("display_name", { ascending: true });
 
-  board.innerHTML = `
-    <table>
-      <thead><tr><th>#</th><th>Nombre</th><th>Puntos</th><th>Exactos</th><th>Resultado</th><th>1 equipo</th><th>Clasifica</th></tr></thead>
-      <tbody>
-        ${data.map((r,i)=>`
-          <tr>
-            <td>${i+1}</td>
-            <td>${r.display_name}</td>
-            <td>${r.points_total}</td>
-            <td>${r.exact_count}</td>
-            <td>${r.result_count}</td>
-            <td>${r.one_team_goals_count}</td>
-            <td>${r.qualified_count}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
+    if (error) throw error;
 
-  const ts = data?.[0]?.updated_at;
-  updated.textContent = ts ? `Última actualización: ${new Date(ts).toLocaleString("es-CO")}` : "";
+    if (!data || data.length === 0) {
+      listDiv.innerHTML = `<div class="small">Aún no hay datos. Cuando el admin cargue resultados y ejecute refresh, aparecerá aquí.</div>`;
+      return;
+    }
+
+    const updatedAt = data[0]?.updated_at ? new Date(data[0].updated_at) : null;
+    if (note && updatedAt) {
+      note.textContent =
+        "Actualizado: " +
+        updatedAt.toLocaleString("es-CO", { timeZone: "America/Bogota" });
+    }
+
+    listDiv.innerHTML = renderTable(data);
+  } catch (e) {
+    showError(e);
+  }
 }
 
-await load();
-setInterval(load, 60000);
+function renderTable(rows) {
+  const header = `
+    <div class="row small" style="justify-content:space-between; opacity:.85; margin-top:8px">
+      <span><strong>Jugador</strong></span>
+      <span><strong>Puntos</strong></span>
+      <span><strong>Exactos</strong></span>
+    </div>
+    <div style="height:8px"></div>
+  `;
+
+  const items = rows
+    .map((r, idx) => {
+      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : "";
+      return `
+        <div class="card" style="margin-top:10px">
+          <div class="row" style="justify-content:space-between; align-items:center">
+            <div><strong>${medal} ${escapeHtml(r.display_name)}</strong></div>
+            <div>${r.points_total ?? 0}</div>
+            <div>${r.exact_count ?? 0}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return header + items;
+}
+
+function showError(e) {
+  const msg = e?.message ?? String(e);
+  if (note) {
+    note.textContent = msg;
+    note.style.color = "#ffb3b3";
+  }
+  if (listDiv) listDiv.innerHTML = "";
+  console.error(e);
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
