@@ -1,8 +1,8 @@
 import { sb } from "./supabaseClient.js";
 
-/** UI helpers */
 const $ = (id) => document.getElementById(id);
 
+// UI
 const who = $("who");
 const adminLink = $("adminLink");
 const logoutBtn = $("logout");
@@ -12,34 +12,32 @@ const reloadBtn = $("reload");
 const listDiv = $("list");
 const leaderDiv = $("leader");
 
-/** App state */
+// Estado
 let session = null;
-let profile = null;
 
-/** Main */
 (async function main() {
   try {
+    // 1) session
     session = await getSessionOrRedirect();
-    profile = await ensureProfile(session);
+
+    // 2) profile (y forzar nombre)
+    await ensureProfile(session);
 
     // listeners
     logoutBtn.addEventListener("click", onLogout);
-    reloadBtn.addEventListener("click", () => refreshAll());
-    stageSel.addEventListener("change", () => refreshMatches());
+    reloadBtn.addEventListener("click", refreshMatches);
+    stageSel.addEventListener("change", refreshMatches);
 
-    // initial load
-    await refreshAll();
+    // 3) carga inicial
+    await refreshMatches();
+    renderLeaderPlaceholder();
 
-    // keep session in sync (optional but helpful)
-    sb.auth.onAuthStateChange((_event, newSession) => {
-      session = newSession;
-    });
+    note.textContent = "";
   } catch (e) {
     showError(e);
   }
 })();
 
-/** Auth */
 async function getSessionOrRedirect() {
   const { data, error } = await sb.auth.getSession();
   if (error) throw error;
@@ -53,16 +51,10 @@ async function getSessionOrRedirect() {
 }
 
 async function onLogout() {
-  try {
-    await sb.auth.signOut();
-  } catch (_) {
-    // ignore
-  } finally {
-    window.location.href = "./index.html";
-  }
+  try { await sb.auth.signOut(); } catch (_) {}
+  window.location.href = "./index.html";
 }
 
-/** Profile (forces name via modal) */
 async function ensureProfile(session) {
   const { data: prof, error } = await sb
     .from("profiles")
@@ -73,16 +65,12 @@ async function ensureProfile(session) {
   if (error) throw error;
 
   let displayName = (prof.display_name || "").trim();
-
-  // Force name when empty or default "Jugador"
   if (!displayName || displayName.toLowerCase() === "jugador") {
     displayName = await askNameAndSave(session);
   }
 
   who.textContent = `${displayName} · ${prof.role}`;
-  adminLink.style.display = prof.role === "admin" ? "inline-block" : "none";
-
-  return { ...prof, display_name: displayName };
+  adminLink.style.display = (prof.role === "admin") ? "inline-block" : "none";
 }
 
 async function askNameAndSave(session) {
@@ -92,7 +80,7 @@ async function askNameAndSave(session) {
   const err = $("nameErr");
 
   if (!modal || !input || !btn || !err) {
-    throw new Error("No se encontró el modal de nombre en app.html (IDs faltantes).");
+    throw new Error("Falta el modal de nombre en app.html (IDs: nameModal/nameInput/saveNameBtn/nameErr).");
   }
 
   modal.style.display = "block";
@@ -110,7 +98,6 @@ async function askNameAndSave(session) {
       const n = name.trim();
       if (n.length < 2) return "Escribe al menos 2 letras.";
       if (n.length > 30) return "Máximo 30 caracteres.";
-      // Letras (incluye tildes y ñ) y espacios
       if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/.test(n)) return "Solo letras y espacios.";
       return null;
     };
@@ -119,10 +106,7 @@ async function askNameAndSave(session) {
       err.textContent = "";
       const name = input.value;
       const msg = validate(name);
-      if (msg) {
-        err.textContent = msg;
-        return;
-      }
+      if (msg) { err.textContent = msg; return; }
 
       btn.disabled = true;
       try {
@@ -152,121 +136,63 @@ async function askNameAndSave(session) {
   });
 }
 
-/** Data loading */
-async function refreshAll() {
-  await refreshMatches();
-  await refreshPrivateLeaderboard();
-  note.textContent = "";
-}
-
-function stageToDb(stage) {
-  // Ajusta si tu DB usa otros valores. Mantengo el mismo texto del select.
-  // grupos/octavos/cuartos/semis/final
-  return stage;
-}
-
 async function refreshMatches() {
   try {
     listDiv.innerHTML = "";
-    const stage = stageToDb(stageSel.value);
+    note.textContent = "";
 
+    const stage = stageSel.value; // usa exactamente lo que tengas en el select: grupos/octavos/...
+
+    // SOLO columnas confirmadas que existen:
     const { data, error } = await sb
       .from("matches")
-      .select("id, kickoff_at, stage, home_team, away_team, home_goals, away_goals, status")
+      .select("id, stage, match_number, team_home, team_away, kickoff_time")
       .eq("stage", stage)
-      .order("kickoff_at", { ascending: true });
+      .order("kickoff_time", { ascending: true });
 
     if (error) throw error;
 
     if (!data || data.length === 0) {
-      listDiv.innerHTML = `<p class="small">No hay partidos cargados para esta fase.</p>`;
+      listDiv.innerHTML = `<p class="small">No hay partidos para la fase <strong>${escapeHtml(stage)}</strong>.</p>`;
       return;
     }
 
-    // Render simple
-    const rows = data.map((m) => {
-      const date = m.kickoff_at ? new Date(m.kickoff_at).toLocaleString("es-CO", { timeZone: "America/Bogota" }) : "—";
-      const score =
-        m.home_goals === null || m.away_goals === null
-          ? "—"
-          : `${m.home_goals} - ${m.away_goals}`;
-
-      const status = m.status || "scheduled";
-
-      return `
-        <div class="card" style="margin-top:10px">
-          <div class="row" style="justify-content:space-between; gap:12px">
-            <div>
-              <div><strong>${escapeHtml(m.home_team)} vs ${escapeHtml(m.away_team)}</strong></div>
-              <div class="small">${date} · <span class="badge">${escapeHtml(status)}</span></div>
-            </div>
-            <div class="badge" style="font-size:16px">${score}</div>
-          </div>
-        </div>
-      `;
-    });
-
-    listDiv.innerHTML = rows.join("");
+    listDiv.innerHTML = data.map(renderMatchCard).join("");
   } catch (e) {
     showError(e);
   }
 }
 
-async function refreshPrivateLeaderboard() {
-  try {
-    leaderDiv.innerHTML = "";
+function renderMatchCard(m) {
+  const dt = m.kickoff_time
+    ? new Date(m.kickoff_time).toLocaleString("es-CO", { timeZone: "America/Bogota" })
+    : "—";
 
-    // Si tienes una tabla cache privada (public_leaderboard_cache), úsala
-    const { data, error } = await sb
-      .from("public_leaderboard_cache")
-      .select("player_id, display_name, points_total, exact_score_count, winner_count, qualified_count, updated_at")
-      .order("points_total", { ascending: false })
-      .limit(50);
-
-    // Si la tabla no existe o RLS la bloquea, mostramos mensaje suave
-    if (error) {
-      leaderDiv.innerHTML = `<p class="small">Tabla privada no disponible aún.</p>`;
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      leaderDiv.innerHTML = `<p class="small">Sin datos todavía.</p>`;
-      return;
-    }
-
-    const table = `
-      <table class="small" style="width:100%; border-collapse:collapse">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding:6px">#</th>
-            <th style="text-align:left; padding:6px">Jugador</th>
-            <th style="text-align:right; padding:6px">Puntos</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data
-            .map(
-              (r, i) => `
-            <tr>
-              <td style="padding:6px">${i + 1}</td>
-              <td style="padding:6px">${escapeHtml(r.display_name || "")}</td>
-              <td style="padding:6px; text-align:right"><strong>${r.points_total ?? 0}</strong></td>
-            </tr>
-          `
-            )
-            .join("")}
-        </tbody>
-      </table>
-    `;
-
-    leaderDiv.innerHTML = table;
-  } catch (e) {
-    // suave
-    leaderDiv.innerHTML = `<p class="small">Tabla privada no disponible aún.</p>`;
-  }
+  return `
+    <div class="card" style="margin-top:10px">
+      <div class="row" style="justify-content:space-between; gap:12px; align-items:center">
+        <div>
+          <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
+          <div class="small">${dt} · <span class="badge">${escapeHtml(m.stage)}</span></div>
+        </div>
+        <div class="badge">—</div>
+      </div>
+      <div class="small" style="opacity:.8; margin-top:8px">
+        (Marcador real y puntos se verán cuando carguemos la parte de resultados/admin)
+      </div>
+    </div>
+  `;
 }
 
-/** Utils */
+function renderLeaderPlaceholder() {
+  leaderDiv.innerHTML = `
+    <p class="small">
+      Tabla privada: pendiente de conectar a tu vista/cache real.
+      (Primero dejemos estable: login + nombre + lista de partidos)
+    </p>
+  `;
+}
+
 function showError(e) {
   const msg = e?.message ?? String(e);
   note.textContent = msg;
@@ -282,5 +208,3 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
-
