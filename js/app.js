@@ -332,6 +332,68 @@ async function savePrediction(card) {
     btn.textContent = "Guardar";
   }
 }
+async function renderPrivateBoard() {
+  leaderDiv.innerHTML = `<div class="small" style="opacity:.8">Cargando tabla…</div>`;
+
+  try {
+    const { data, error } = await sb
+      .from("public_leaderboard_cache")
+      .select("display_name, points_total, exact_count, updated_at")
+      .order("points_total", { ascending: false })
+      .order("exact_count", { ascending: false })
+      .order("display_name", { ascending: true })
+      .limit(50);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      leaderDiv.innerHTML = `<div class="small">Sin datos todavía.</div>`;
+      return;
+    }
+
+    // Tomamos el máximo updated_at (por si no es el primero)
+    const maxUpdated = data
+      .map(r => r.updated_at)
+      .filter(Boolean)
+      .sort()
+      .slice(-1)[0];
+
+    const updated = maxUpdated
+      ? new Date(maxUpdated).toLocaleString("es-CO", { timeZone: "America/Bogota" })
+      : "—";
+
+    leaderDiv.innerHTML = `
+      <div class="small" style="margin-bottom:8px; opacity:.85">
+        Última actualización: ${updated}
+      </div>
+
+      <div style="overflow:auto">
+        <table style="width:100%; border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left; opacity:.85">
+              <th style="padding:8px 6px">#</th>
+              <th style="padding:8px 6px">Jugador</th>
+              <th style="padding:8px 6px">Pts</th>
+              <th style="padding:8px 6px">Exactos</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map((r, i) => `
+              <tr style="border-top:1px solid rgba(255,255,255,.10)">
+                <td style="padding:8px 6px">${i + 1}</td>
+                <td style="padding:8px 6px">${escapeHtml(r.display_name ?? "Jugador")}</td>
+                <td style="padding:8px 6px">${r.points_total ?? 0}</td>
+                <td style="padding:8px 6px">${r.exact_count ?? 0}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    leaderDiv.innerHTML = `<div class="small" style="color:#ffb3b3">Error cargando tabla: ${escapeHtml(e?.message ?? e)}</div>`;
+  }
+}
 
 /* ---------------- Utils ---------------- */
 
