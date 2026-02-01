@@ -266,6 +266,20 @@ function wireRowEvents() {
 
 async function saveRow(card) {
   const id = card.getAttribute("data-id");
+  const kickoffISO = card.getAttribute("data-kickoff");
+
+if (kickoffISO) {
+  const kickoff = new Date(kickoffISO);
+  const now = new Date();
+
+  if (now >= kickoff) {
+    const msgEl = card.querySelector(".msg");
+    msgEl.textContent = "⛔ El partido ya inició. No se pueden modificar resultados.";
+    msgEl.style.color = "#ffb3b3";
+    return;
+  }
+}
+
   const home = card.getAttribute("data-home");
   const away = card.getAttribute("data-away");
 
