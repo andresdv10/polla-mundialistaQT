@@ -10,6 +10,15 @@ const note = $("note");
 const stageSel = $("stage");
 const reloadBtn = $("reload");
 const listDiv = $("list");
+const leaderboardAdmin = $("leaderboardAdmin");
+const downloadBackupBtn = $("downloadBackup");
+const backupMsg = $("backupMsg");
+
+const targetUserId = $("targetUserId");
+const targetRole = $("targetRole");
+const setRoleBtn = $("setRole");
+const roleMsg = $("roleMsg");
+
 
 let session = null;
 
@@ -28,12 +37,17 @@ let session = null;
     logoutBtn.addEventListener("click", onLogout);
     reloadBtn.addEventListener("click", refreshMatches);
     stageSel.addEventListener("change", refreshMatches);
+    downloadBackupBtn.addEventListener("click", downloadBackupCSV);
+setRoleBtn.addEventListener("click", onSetRole);
+
 
     // nuevo: refrescar ranking cache
     refreshBoardBtn.addEventListener("click", onRefreshPublicBoard);
 
     await loadStagesFromDB();
     await refreshMatches();
+    await renderAdminBoard();
+
   } catch (e) {
     showError(e);
   }
@@ -158,6 +172,8 @@ async function refreshMatches() {
 
     listDiv.innerHTML = data.map(renderAdminMatchRow).join("");
     wireRowEvents();
+    await renderAdminBoard();
+
   } catch (e) {
     showError(e);
   }
@@ -356,3 +372,150 @@ function escapeHtml(s) {
 function escapeAttr(s) {
   return escapeHtml(String(s));
 }
+async function renderAdminBoard() {
+  if (!leaderboardAdmin) return;
+
+  try {
+    const { data, error } = await sb
+      .from("public_leaderboard_cache")
+      .select("display_name, points_total, exact_count, updated_at")
+      .order("points_total", { ascending: false })
+      .order("exact_count", { ascending: false })
+      .order("display_name", { ascending: true })
+      .limit(50);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      leaderboardAdmin.innerHTML = `<div class="small">Sin datos todavía.</div>`;
+      return;
+    }
+
+    const maxUpdated = data
+      .map(r => r.updated_at)
+      .filter(Boolean)
+      .sort()
+      .slice(-1)[0];
+
+    const updated = maxUpdated
+      ? new Date(maxUpdated).toLocaleString("es-CO", { timeZone: "America/Bogota" })
+      : "—";
+
+    leaderboardAdmin.innerHTML = `
+      <div class="small" style="margin-bottom:8px; opacity:.85">
+        Última actualización: ${updated}
+      </div>
+
+      <div style="overflow:auto">
+        <table style="width:100%; border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left; opacity:.85">
+              <th style="padding:8px 6px">#</th>
+              <th style="padding:8px 6px">Jugador</th>
+              <th style="padding:8px 6px">Pts</th>
+              <th style="padding:8px 6px">Exactos</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map((r, i) => `
+              <tr style="border-top:1px solid rgba(255,255,255,.10);">
+                <td style="padding:8px 6px">${i + 1}</td>
+                <td style="padding:8px 6px">${escapeHtml((r.display_name ?? "Jugador"))}</td>
+                <td style="padding:8px 6px">${r.points_total ?? 0}</td>
+                <td style="padding:8px 6px">${r.exact_count ?? 0}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    leaderboardAdmin.innerHTML = `<div class="small" style="color:#ffb3b3">Error cargando tabla</div>`;
+  }
+}
+
+async function downloadBackupCSV() {
+  backupMsg.textContent = "";
+  backupMsg.style.color = "";
+
+  try {
+    downloadBackupBtn.disabled = true;
+    downloadBackupBtn.textContent = "Generando…";
+
+    const { data, error } = await sb.rpc("admin_export_backup");
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      backupMsg.textContent = "No hay datos para exportar.";
+      return;
+    }
+
+    const headers = Object.keys(data[0]);
+    const csv = [
+      headers.join(","),
+      ...data.map(row => headers.map(h => csvCell(row[h])).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backup_polla_${new Date().toISOString().slice(0,19).replaceAll(":","-")}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    backupMsg.textContent = `Backup generado ✅ (${data.length} filas)`;
+    backupMsg.style.color = "#b6f7c1";
+  } catch (e) {
+    backupMsg.textContent = "Error: " + (e?.message ?? e);
+    backupMsg.style.color = "#ffb3b3";
+  } finally {
+    downloadBackupBtn.disabled = false;
+    downloadBackupBtn.textContent = "Descargar backup (CSV)";
+  }
+}
+
+async function onSetRole() {
+  roleMsg.textContent = "";
+  roleMsg.style.color = "";
+
+  const uid = (targetUserId.value || "").trim();
+  const role = (targetRole.value || "").trim();
+
+  if (!uid) {
+    roleMsg.textContent = "Pega el UUID del usuario.";
+    roleMsg.style.color = "#ffb3b3";
+    return;
+  }
+
+  try {
+    setRoleBtn.disabled = true;
+    setRoleBtn.textContent = "Aplicando…";
+
+    const { error } = await sb.rpc("admin_set_role", {
+      target_user_id: uid,
+      new_role: role
+    });
+
+    if (error) throw error;
+
+    roleMsg.textContent = `Rol actualizado ✅ (${uid} → ${role})`;
+    roleMsg.style.color = "#b6f7c1";
+  } catch (e) {
+    roleMsg.textContent = "Error: " + (e?.message ?? e);
+    roleMsg.style.color = "#ffb3b3";
+  } finally {
+    setRoleBtn.disabled = false;
+    setRoleBtn.textContent = "Aplicar";
+  }
+}
+
+function csvCell(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v).replaceAll('"', '""');
+  return /[",\n]/.test(s) ? `"${s}"` : s;
+}
+
