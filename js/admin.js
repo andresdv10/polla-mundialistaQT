@@ -208,7 +208,13 @@ function renderAdminMatchRow(m) {
   `;
 
   return `
-    <div class="card" style="margin-top:12px" data-id="${m.id}" data-home="${escapeAttr(m.team_home)}" data-away="${escapeAttr(m.team_away)}">
+    <div class="card"
+     style="margin-top:12px"
+     data-id="${m.id}"
+     data-home="${escapeAttr(m.team_home)}"
+     data-away="${escapeAttr(m.team_away)}"
+     data-kickoff="${m.kickoff_time}">
+ data-home="${escapeAttr(m.team_home)}" data-away="${escapeAttr(m.team_away)}">
       <div class="row" style="justify-content:space-between; gap:10px; align-items:center">
         <div>
           <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
