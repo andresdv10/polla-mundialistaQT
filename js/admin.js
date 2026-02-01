@@ -142,18 +142,15 @@ async function loadStagesFromDB() {
   }
 
   for (const st of stages) {
-  const opt = document.createElement("option");
-  opt.value = st;
-  opt.textContent = st;
+    const opt = document.createElement("option");
+    opt.value = st;
+    opt.textContent = st;
 
-  // 👇 forzar grupos como default
-  if (st === "grupos") {
-    opt.selected = true;
+    // (opcional) forzar grupos como default EN ADMIN
+    if (st === "grupos") opt.selected = true;
+
+    stageSel.appendChild(opt);
   }
-
-  stageSel.appendChild(opt);
-}
-
 }
 
 async function refreshMatches() {
@@ -209,12 +206,11 @@ function renderAdminMatchRow(m) {
 
   return `
     <div class="card"
-     style="margin-top:12px"
-     data-id="${m.id}"
-     data-home="${escapeAttr(m.team_home)}"
-     data-away="${escapeAttr(m.team_away)}"
-     data-kickoff="${m.kickoff_time}">
- data-home="${escapeAttr(m.team_home)}" data-away="${escapeAttr(m.team_away)}">
+      style="margin-top:12px"
+      data-id="${m.id}"
+      data-home="${escapeAttr(m.team_home)}"
+      data-away="${escapeAttr(m.team_away)}"
+      data-kickoff="${escapeAttr(m.kickoff_time ?? "")}">
       <div class="row" style="justify-content:space-between; gap:10px; align-items:center">
         <div>
           <div><strong>#${m.match_number ?? ""} ${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
@@ -268,17 +264,17 @@ async function saveRow(card) {
   const id = card.getAttribute("data-id");
   const kickoffISO = card.getAttribute("data-kickoff");
 
-if (kickoffISO) {
-  const kickoff = new Date(kickoffISO);
-  const now = new Date();
-
-  if (now >= kickoff) {
-    const msgEl = card.querySelector(".msg");
-    msgEl.textContent = "⛔ El partido ya inició. No se pueden modificar resultados.";
-    msgEl.style.color = "#ffb3b3";
-    return;
+  // Bloqueo por kickoff (admin) — si no lo quieres aquí, se borra este bloque.
+  if (kickoffISO) {
+    const kickoff = new Date(kickoffISO);
+    const now = new Date();
+    if (now >= kickoff) {
+      const msgEl = card.querySelector(".msg");
+      msgEl.textContent = "⛔ El partido ya inició. No se pueden modificar resultados.";
+      msgEl.style.color = "#ffb3b3";
+      return;
+    }
   }
-}
 
   const home = card.getAttribute("data-home");
   const away = card.getAttribute("data-away");
@@ -364,7 +360,6 @@ if (kickoffISO) {
       const r = await sb.rpc("refresh_public_leaderboard_cache");
       if (r.error) console.warn("No se pudo refrescar leaderboard cache:", r.error);
     }
-
   } catch (e) {
     msgEl.textContent = "Error guardando: " + (e?.message ?? e);
     msgEl.style.color = "#ffb3b3";
@@ -409,7 +404,6 @@ async function renderAdminBoard() {
       <div class="small" style="margin-bottom:8px; opacity:.85">
         Última actualización: ${updated}
       </div>
-
       <div style="overflow:auto">
         <table style="width:100%; border-collapse:collapse">
           <thead>
