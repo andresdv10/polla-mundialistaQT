@@ -29,31 +29,57 @@
     </div>
 
     <div class="grid-2">
-      <div class="card">
-        <h3>Editar resultados</h3>
+  <div class="card">
+    <h3>Editar resultados</h3>
 
-        <div class="row">
-          <label class="small">Fase</label>
-          <select id="stage"></select>
-          <button id="reload" class="secondary">Recargar</button>
-        </div>
+    <div class="row">
+      <label class="small">Fase</label>
+      <select id="stage"></select>
+      <button id="reload" class="secondary">Recargar</button>
+    </div>
 
-        <div id="list" class="small" style="margin-top:12px"></div>
+    <div id="list" class="small" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Tabla</h3>
+    <div class="small" id="leaderboardAdmin"></div>
+  </div>
+</div>
+
+<div class="grid-2" style="margin-top:12px">
+  <div class="card">
+    <h3>Backup</h3>
+    <p class="small">Descarga un CSV con predicciones y resultados.</p>
+    <button id="downloadBackup" class="secondary">Descargar backup (CSV)</button>
+    <p id="backupMsg" class="small"></p>
+  </div>
+
+  <div class="card">
+    <h3>Roles</h3>
+    <p class="small">Convierte a un usuario en admin usando su UUID.</p>
+
+    <div class="row" style="gap:10px; align-items:flex-end; flex-wrap:wrap">
+      <div style="min-width:320px; flex:1">
+        <div class="small">UUID usuario</div>
+        <input id="targetUserId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
       </div>
 
-      <div class="card">
-        <h3>Ayuda rápida</h3>
-        <div class="small">
-          <p><strong>Marcador:</strong> se guarda como <code>score_home</code> y <code>score_away</code> (90').</p>
-          <p><strong>Status:</strong> <code>scheduled</code> / <code>finished</code>.</p>
-          <p><strong>Eliminación:</strong> si hay empate, elige <code>winner_team</code> (ganador). Si no hay empate, se deja vacío.</p>
-          <hr style="opacity:.2">
-          <p class="small" style="opacity:.8">
-            Nota: el campo <code>qualified_team</code> lo manejaremos después. Por ahora basta con
-            guardar marcador y ganador si aplica.
-          </p>
-        </div>
+      <div style="min-width:160px">
+        <div class="small">Rol</div>
+        <select id="targetRole">
+          <option value="admin">admin</option>
+          <option value="player">player</option>
+        </select>
       </div>
+
+      <button id="setRole" class="secondary">Aplicar</button>
+    </div>
+
+    <p id="roleMsg" class="small"></p>
+  </div>
+</div>
+
     </div>
   </div>
 
