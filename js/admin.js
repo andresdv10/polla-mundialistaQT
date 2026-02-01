@@ -142,11 +142,18 @@ async function loadStagesFromDB() {
   }
 
   for (const st of stages) {
-    const opt = document.createElement("option");
-    opt.value = st;
-    opt.textContent = st;
-    stageSel.appendChild(opt);
+  const opt = document.createElement("option");
+  opt.value = st;
+  opt.textContent = st;
+
+  // 👇 forzar grupos como default
+  if (st === "grupos") {
+    opt.selected = true;
   }
+
+  stageSel.appendChild(opt);
+}
+
 }
 
 async function refreshMatches() {
