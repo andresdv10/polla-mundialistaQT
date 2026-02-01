@@ -9,6 +9,7 @@
 
 <body>
   <div class="container">
+
     <div class="row">
       <div class="card" style="flex:1">
         <h2>🛠️ Panel Admin</h2>
@@ -18,7 +19,7 @@
           <a href="./app.html" class="badge">Volver a App</a>
           <a href="./public.html" class="badge">Ranking público</a>
 
-          <!-- NUEVO -->
+          <!-- NUEVO: refrescar cache del ranking público -->
           <button id="refreshBoard" class="secondary">Actualizar ranking</button>
 
           <button id="logout" class="secondary">Salir</button>
@@ -29,58 +30,58 @@
     </div>
 
     <div class="grid-2">
-  <div class="card">
-    <h3>Editar resultados</h3>
+      <div class="card">
+        <h3>Editar resultados</h3>
 
-    <div class="row">
-      <label class="small">Fase</label>
-      <select id="stage"></select>
-      <button id="reload" class="secondary">Recargar</button>
-    </div>
+        <div class="row">
+          <label class="small">Fase</label>
+          <select id="stage"></select>
+          <button id="reload" class="secondary">Recargar</button>
+        </div>
 
-    <div id="list" class="small" style="margin-top:12px"></div>
-  </div>
-
-  <div class="card">
-    <h3>Tabla</h3>
-    <div class="small" id="leaderboardAdmin"></div>
-  </div>
-</div>
-
-<div class="grid-2" style="margin-top:12px">
-  <div class="card">
-    <h3>Backup</h3>
-    <p class="small">Descarga un CSV con predicciones y resultados.</p>
-    <button id="downloadBackup" class="secondary">Descargar backup (CSV)</button>
-    <p id="backupMsg" class="small"></p>
-  </div>
-
-  <div class="card">
-    <h3>Roles</h3>
-    <p class="small">Convierte a un usuario en admin usando su UUID.</p>
-
-    <div class="row" style="gap:10px; align-items:flex-end; flex-wrap:wrap">
-      <div style="min-width:320px; flex:1">
-        <div class="small">UUID usuario</div>
-        <input id="targetUserId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <div id="list" class="small" style="margin-top:12px"></div>
       </div>
 
-      <div style="min-width:160px">
-        <div class="small">Rol</div>
-        <select id="targetRole">
-          <option value="admin">admin</option>
-          <option value="player">player</option>
-        </select>
+      <div class="card">
+        <h3>Tabla</h3>
+        <div class="small" id="leaderboardAdmin"></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:12px">
+      <div class="card">
+        <h3>Backup</h3>
+        <p class="small">Descarga un CSV con predicciones y resultados.</p>
+        <button id="downloadBackup" class="secondary">Descargar backup (CSV)</button>
+        <p id="backupMsg" class="small"></p>
       </div>
 
-      <button id="setRole" class="secondary">Aplicar</button>
+      <div class="card">
+        <h3>Roles</h3>
+        <p class="small">Convierte a un usuario en admin usando su UUID.</p>
+
+        <div class="row" style="gap:10px; align-items:flex-end; flex-wrap:wrap">
+          <div style="min-width:320px; flex:1">
+            <div class="small">UUID usuario</div>
+            <input id="targetUserId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+          </div>
+
+          <div style="min-width:160px">
+            <div class="small">Rol</div>
+            <select id="targetRole">
+              <option value="admin">admin</option>
+              <option value="player">player</option>
+            </select>
+          </div>
+
+          <button id="setRole" class="secondary">Aplicar</button>
+        </div>
+
+        <p id="roleMsg" class="small"></p>
+      </div>
     </div>
 
-    <p id="roleMsg" class="small"></p>
   </div>
-</div>
-
-    </div>
 
   <script type="module" src="./js/admin.js"></script>
 </body>
