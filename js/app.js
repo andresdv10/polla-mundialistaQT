@@ -46,13 +46,13 @@ let profile = null;
     reloadBtn.addEventListener("click", refresh);
     stageSel.addEventListener("change", refresh);
 
-    // Cargar fases disponibles desde DB
+    // Cargar fases disponibles desde DB (y dejar grupos como default)
     await loadStagesFromDB();
 
     // Render inicial
     await refresh();
 
-    // Tabla privada (placeholder)
+    // Tabla privada
     await renderPrivateBoard();
   } catch (e) {
     showError(e);
@@ -80,7 +80,6 @@ async function onLogout() {
 /* ---------------- Profile ---------------- */
 
 async function ensureProfile(userId) {
-  // 1) intentar leer
   let { data, error } = await sb
     .from("profiles")
     .select("id, display_name, role")
@@ -89,7 +88,6 @@ async function ensureProfile(userId) {
 
   if (error) throw error;
 
-  // 2) si no existe, crear
   if (!data) {
     const ins = await sb
       .from("profiles")
@@ -167,15 +165,25 @@ async function loadStagesFromDB() {
   if (error) throw error;
 
   const stages = [...new Set((data || []).map(r => r.stage).filter(Boolean))];
-const fallback = ["grupos", "r32", "r16", "cuartos", "semis", "final"];
+  const fallback = ["grupos", "r32", "r16", "cuartos", "semis", "final"];
   const list = stages.length ? stages : fallback;
 
   stageSel.innerHTML = "";
+
+  // ✅ prioridad: que "grupos" quede seleccionado al cargar
+  const hasGrupos = list.includes("grupos");
+
   for (const st of list) {
     const opt = document.createElement("option");
     opt.value = st;
     opt.textContent = st;
+    if (hasGrupos && st === "grupos") opt.selected = true;
     stageSel.appendChild(opt);
+  }
+
+  // si por alguna razón no existe grupos, selecciona el primero
+  if (!hasGrupos && stageSel.options.length > 0) {
+    stageSel.selectedIndex = 0;
   }
 }
 
@@ -200,7 +208,7 @@ async function refresh() {
       return;
     }
 
-    // 2) traer mis predicciones de esos partidos (OJO: columnas reales pred_home/pred_away)
+    // 2) traer mis predicciones de esos partidos
     const matchIds = matches.map(m => m.id);
 
     const { data: preds, error: pErr } = await sb
@@ -231,17 +239,27 @@ function renderMatchWithPrediction(m, pred) {
   const ph = pred?.pred_home ?? "";
   const pa = pred?.pred_away ?? "";
 
-  const locked = (m.status === "finished");
+  // ✅ bloqueo por kickoff (hora exacta)
+  const kickoff = m.kickoff_time ? new Date(m.kickoff_time) : null;
+  const now = new Date();
+  const started = kickoff ? (now >= kickoff) : false;
+
+  // tu bloqueo original por "finished" lo mantenemos, pero ahora también bloquea si started
+  const locked = (m.status === "finished") || started;
   const disabledAttr = locked ? "disabled" : "";
 
   const officialLine = (m.status === "finished" && m.score_home !== null && m.score_away !== null)
     ? `<div class="small" style="opacity:.85">Resultado oficial: <strong>${m.score_home} - ${m.score_away}</strong></div>`
     : `<div class="small" style="opacity:.75">Status: ${escapeHtml(m.status ?? "scheduled")}</div>`;
 
+  const lockMsg = (m.status === "finished")
+    ? `Predicción bloqueada (partido finalizado).`
+    : (started ? `Predicción bloqueada (partido iniciado).` : ``);
+
   return `
-    <div class="card" style="margin-top:12px" data-match-id="${m.id}">
+    <div class="card" style="margin-top:12px" data-match-id="${m.id}" data-kickoff="${escapeAttr(m.kickoff_time ?? "")}">
       <div>
-<div><strong>${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
+        <div><strong>${escapeHtml(m.team_home)} vs ${escapeHtml(m.team_away)}</strong></div>
         <div class="small">${dt} · <span class="badge">${escapeHtml(m.stage)}</span></div>
         ${officialLine}
       </div>
@@ -261,7 +279,7 @@ function renderMatchWithPrediction(m, pred) {
         <span class="msg small" style="opacity:.85"></span>
       </div>
 
-      ${locked ? `<div class="small" style="opacity:.7; margin-top:6px">Predicción bloqueada (partido finalizado).</div>` : ``}
+      ${locked ? `<div class="small" style="opacity:.7; margin-top:6px">${escapeHtml(lockMsg)}</div>` : ``}
     </div>
   `;
 }
@@ -277,6 +295,20 @@ function wirePredictionEvents() {
 
 async function savePrediction(card) {
   const matchId = parseInt(card.getAttribute("data-match-id"), 10);
+
+  // ✅ bloqueo real por kickoff ANTES de guardar
+  const kickoffISO = card.getAttribute("data-kickoff");
+  if (kickoffISO) {
+    const kickoff = new Date(kickoffISO);
+    const now = new Date();
+    if (now >= kickoff) {
+      const msgEl = card.querySelector(".msg");
+      msgEl.textContent = "⛔ El partido ya inició. No puedes guardar predicción.";
+      msgEl.style.color = "#ffb3b3";
+      return;
+    }
+  }
+
   const phEl = card.querySelector(".ph");
   const paEl = card.querySelector(".pa");
   const msgEl = card.querySelector(".msg");
@@ -332,9 +364,12 @@ async function savePrediction(card) {
     btn.textContent = "Guardar";
   }
 }
+
+/* ---------------- Private board ---------------- */
+
 async function renderPrivateBoard() {
-leaderDiv.innerHTML = "";
-const myName = (profile?.display_name || "").trim();
+  leaderDiv.innerHTML = "";
+  const myName = (profile?.display_name || "").trim();
 
   try {
     const { data, error } = await sb
@@ -352,7 +387,6 @@ const myName = (profile?.display_name || "").trim();
       return;
     }
 
-    // Tomamos el máximo updated_at (por si no es el primero)
     const maxUpdated = data
       .map(r => r.updated_at)
       .filter(Boolean)
@@ -379,26 +413,25 @@ const myName = (profile?.display_name || "").trim();
             </tr>
           </thead>
           <tbody>
-           ${data.map((r, i) => {
-  const name = (r.display_name ?? "Jugador").trim();
-  const isMe = myName && name.toLowerCase() === myName.toLowerCase();
+            ${data.map((r, i) => {
+              const name = (r.display_name ?? "Jugador").trim();
+              const isMe = myName && name.toLowerCase() === myName.toLowerCase();
 
-  return `
-    <tr style="
-      border-top:1px solid rgba(255,255,255,.10);
-      ${isMe ? "background:rgba(255,255,255,.06); outline:1px solid rgba(120,180,255,.35);" : ""}
-    ">
-      <td style="padding:8px 6px">${i + 1}</td>
-      <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">
-        ${escapeHtml(name)}
-        ${isMe ? ` <span class="badge" style="margin-left:6px">Tú</span>` : ""}
-      </td>
-      <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">${r.points_total ?? 0}</td>
-      <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">${r.exact_count ?? 0}</td>
-    </tr>
-  `;
-}).join("")}
-
+              return `
+                <tr style="
+                  border-top:1px solid rgba(255,255,255,.10);
+                  ${isMe ? "background:rgba(255,255,255,.06); outline:1px solid rgba(120,180,255,.35);" : ""}
+                ">
+                  <td style="padding:8px 6px">${i + 1}</td>
+                  <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">
+                    ${escapeHtml(name)}
+                    ${isMe ? ` <span class="badge" style="margin-left:6px">Tú</span>` : ""}
+                  </td>
+                  <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">${r.points_total ?? 0}</td>
+                  <td style="padding:8px 6px; ${isMe ? "font-weight:700;" : ""}">${r.exact_count ?? 0}</td>
+                </tr>
+              `;
+            }).join("")}
           </tbody>
         </table>
       </div>
