@@ -5,12 +5,14 @@ const $ = (id) => document.getElementById(id);
 // UI
 const who = $("who");
 const logoutBtn = $("logout");
-const refreshBoardBtn = $("refreshBoard"); // nuevo
+const refreshBoardBtn = $("refreshBoard");
 const note = $("note");
+
 const stageSel = $("stage");
 const reloadBtn = $("reload");
 const listDiv = $("list");
 const leaderboardAdmin = $("leaderboardAdmin");
+
 const downloadBackupBtn = $("downloadBackup");
 const backupMsg = $("backupMsg");
 
@@ -18,7 +20,6 @@ const targetUserId = $("targetUserId");
 const targetRole = $("targetRole");
 const setRoleBtn = $("setRole");
 const roleMsg = $("roleMsg");
-
 
 let session = null;
 
@@ -33,16 +34,18 @@ let session = null;
 
     who.textContent = `${prof.display_name || "Admin"} · admin`;
     note.textContent = `Tu UUID: ${session.user.id}`;
+    note.style.color = "";
 
-    logoutBtn.addEventListener("click", onLogout);
-    reloadBtn.addEventListener("click", refreshMatches);
-    stageSel.addEventListener("change", refreshMatches);
-    downloadBackupBtn.addEventListener("click", downloadBackupCSV);
-setRoleBtn.addEventListener("click", onSetRole);
+    // Eventos
+    logoutBtn?.addEventListener("click", onLogout);
+    reloadBtn?.addEventListener("click", refreshMatches);
+    stageSel?.addEventListener("change", refreshMatches);
 
+    downloadBackupBtn?.addEventListener("click", downloadBackupCSV);
+    setRoleBtn?.addEventListener("click", onSetRole);
 
-    // nuevo: refrescar ranking cache
-    refreshBoardBtn.addEventListener("click", onRefreshPublicBoard);
+    // refrescar ranking público
+    refreshBoardBtn?.addEventListener("click", onRefreshPublicBoard);
 
     await loadStagesFromDB();
     await refreshMatches();
@@ -85,6 +88,8 @@ async function getMyProfile(userId) {
 /* ---------------- Public board refresh ---------------- */
 
 async function onRefreshPublicBoard() {
+  if (!refreshBoardBtn) return;
+
   note.style.color = "";
   const prev = note.textContent;
   note.textContent = "Actualizando ranking público…";
@@ -93,7 +98,6 @@ async function onRefreshPublicBoard() {
   refreshBoardBtn.textContent = "Actualizando…";
 
   try {
-    // RPC (función SQL) que ya creaste
     const { error } = await sb.rpc("refresh_public_leaderboard_cache");
     if (error) throw error;
 
@@ -107,7 +111,6 @@ async function onRefreshPublicBoard() {
     refreshBoardBtn.disabled = false;
     refreshBoardBtn.textContent = "Actualizar ranking";
 
-    // si quieres, volver al texto anterior después de 4s
     setTimeout(() => {
       if (note.textContent?.startsWith("Ranking actualizado")) {
         note.textContent = prev || "";
@@ -172,8 +175,8 @@ async function refreshMatches() {
 
     listDiv.innerHTML = data.map(renderAdminMatchRow).join("");
     wireRowEvents();
-    await renderAdminBoard();
 
+    await renderAdminBoard();
   } catch (e) {
     showError(e);
   }
@@ -271,7 +274,6 @@ async function saveRow(card) {
   const status = stEl.value || "scheduled";
   let winner_team = (wtEl.value || "").trim();
 
-  // Validaciones básicas
   if (score_home !== null && (Number.isNaN(score_home) || score_home < 0)) {
     msgEl.textContent = "Score local inválido.";
     msgEl.style.color = "#ffb3b3";
@@ -283,7 +285,6 @@ async function saveRow(card) {
     return;
   }
 
-  // finished => exigir ambos
   if (status === "finished") {
     if (score_home === null || score_away === null) {
       msgEl.textContent = "Si el partido está finished, debes poner ambos marcadores.";
@@ -291,19 +292,15 @@ async function saveRow(card) {
       return;
     }
   } else {
-    // si NO finished, winner no tiene sentido
     winner_team = "";
     wtEl.value = "";
   }
 
-  // Si finished y hay marcadores:
   if (status === "finished" && score_home !== null && score_away !== null) {
     if (score_home !== score_away) {
-      // NO empate: winner_team se limpia (según tu regla)
       winner_team = "";
       wtEl.value = "";
     } else {
-      // empate: si no eligió ganador, advertimos (pero guardamos)
       if (!winner_team) {
         msgEl.textContent = "Empate: si es eliminación, selecciona ganador (winner_team). Guardaré igual.";
         msgEl.style.color = "#ffd28a";
@@ -335,12 +332,11 @@ async function saveRow(card) {
 
     msgEl.textContent = "Guardado ✅";
     msgEl.style.color = "#b6f7c1";
-    // Si quedó finished, recalcula ranking público (cache)
-if (status === "finished") {
-  const r = await sb.rpc("refresh_public_leaderboard_cache");
-  // Si falla, no tumbamos el guardado; solo lo avisamos
-  if (r.error) console.warn("No se pudo refrescar leaderboard cache:", r.error);
-}
+
+    if (status === "finished") {
+      const r = await sb.rpc("refresh_public_leaderboard_cache");
+      if (r.error) console.warn("No se pudo refrescar leaderboard cache:", r.error);
+    }
 
   } catch (e) {
     msgEl.textContent = "Error guardando: " + (e?.message ?? e);
@@ -351,27 +347,8 @@ if (status === "finished") {
   }
 }
 
-/* ---------------- Utils ---------------- */
+/* ---------------- Admin leaderboard render ---------------- */
 
-function showError(e) {
-  const msg = e?.message ?? String(e);
-  note.textContent = msg;
-  note.style.color = "#ffb3b3";
-  console.error(e);
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function escapeAttr(s) {
-  return escapeHtml(String(s));
-}
 async function renderAdminBoard() {
   if (!leaderboardAdmin) return;
 
@@ -434,6 +411,8 @@ async function renderAdminBoard() {
   }
 }
 
+/* ---------------- Backup CSV ---------------- */
+
 async function downloadBackupCSV() {
   backupMsg.textContent = "";
   backupMsg.style.color = "";
@@ -447,6 +426,7 @@ async function downloadBackupCSV() {
 
     if (!data || data.length === 0) {
       backupMsg.textContent = "No hay datos para exportar.";
+      backupMsg.style.color = "#ffd28a";
       return;
     }
 
@@ -477,6 +457,8 @@ async function downloadBackupCSV() {
     downloadBackupBtn.textContent = "Descargar backup (CSV)";
   }
 }
+
+/* ---------------- Role management ---------------- */
 
 async function onSetRole() {
   roleMsg.textContent = "";
@@ -513,9 +495,30 @@ async function onSetRole() {
   }
 }
 
+/* ---------------- Utils ---------------- */
+
+function showError(e) {
+  const msg = e?.message ?? String(e);
+  note.textContent = msg;
+  note.style.color = "#ffb3b3";
+  console.error(e);
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(s) {
+  return escapeHtml(String(s));
+}
+
 function csvCell(v) {
   if (v === null || v === undefined) return "";
   const s = String(v).replaceAll('"', '""');
   return /[",\n]/.test(s) ? `"${s}"` : s;
 }
-
