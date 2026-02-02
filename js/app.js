@@ -54,6 +54,17 @@ let profile = null;
 
     // Tabla privada
     await renderPrivateBoard();
+
+    // ✅ Auto-refresh cada 5 minutos (300s)
+    setInterval(async () => {
+      try {
+        await refresh();
+        await renderPrivateBoard();
+      } catch (e) {
+        console.warn("Auto-refresh falló:", e);
+      }
+    }, 300000);
+
   } catch (e) {
     showError(e);
   }
@@ -244,7 +255,7 @@ function renderMatchWithPrediction(m, pred) {
   const now = new Date();
   const started = kickoff ? (now >= kickoff) : false;
 
-  // tu bloqueo original por "finished" lo mantenemos, pero ahora también bloquea si started
+  // Bloqueo visual: si ya inició o si terminó
   const locked = (m.status === "finished") || started;
   const disabledAttr = locked ? "disabled" : "";
 
@@ -296,7 +307,7 @@ function wirePredictionEvents() {
 async function savePrediction(card) {
   const matchId = parseInt(card.getAttribute("data-match-id"), 10);
 
-  // ✅ bloqueo real por kickoff ANTES de guardar
+  // ✅ bloqueo local antes de llamar a la DB (evita intentar guardar)
   const kickoffISO = card.getAttribute("data-kickoff");
   if (kickoffISO) {
     const kickoff = new Date(kickoffISO);
@@ -339,26 +350,28 @@ async function savePrediction(card) {
   btn.textContent = "Guardando…";
 
   try {
-    const { error } = await sb
-      .from("predictions")
-      .upsert(
-        {
-          user_id: session.user.id,
-          match_id: matchId,
-          pred_home,
-          pred_away,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: "user_id,match_id" }
-      );
+    // ✅ Opción B: guardado vía RPC (bloqueo real en DB)
+    const { error } = await sb.rpc("save_prediction_locked", {
+      p_match_id: matchId,
+      p_pred_home: pred_home,
+      p_pred_away: pred_away
+    });
 
     if (error) throw error;
 
     msgEl.textContent = "Guardado ✅";
     msgEl.style.color = "#b6f7c1";
   } catch (e) {
-    msgEl.textContent = "Error guardando: " + (e?.message ?? e);
-    msgEl.style.color = "#ffb3b3";
+    const msg = e?.message ?? String(e);
+
+    // Mensaje amigable si lo bloqueó la DB
+    if (msg.toLowerCase().includes("predicción bloqueada") || msg.toLowerCase().includes("partido ya inició")) {
+      msgEl.textContent = "⛔ Se bloqueó: el partido ya inició.";
+      msgEl.style.color = "#ffb3b3";
+    } else {
+      msgEl.textContent = "Error guardando: " + msg;
+      msgEl.style.color = "#ffb3b3";
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = "Guardar";
