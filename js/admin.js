@@ -262,19 +262,11 @@ function wireRowEvents() {
 
 async function saveRow(card) {
   const id = card.getAttribute("data-id");
-  const kickoffISO = card.getAttribute("data-kickoff");
 
-  // Bloqueo por kickoff (admin) — si no lo quieres aquí, se borra este bloque.
-  if (kickoffISO) {
-    const kickoff = new Date(kickoffISO);
-    const now = new Date();
-    if (now >= kickoff) {
-      const msgEl = card.querySelector(".msg");
-      msgEl.textContent = "⛔ El partido ya inició. No se pueden modificar resultados.";
-      msgEl.style.color = "#ffb3b3";
-      return;
-    }
-  }
+  // ✅ CAMBIO CLAVE:
+  // Antes había un bloqueo por kickoff que impedía editar después de iniciar.
+  // Tú pediste: "admin puede ingresar resultados sin restricciones".
+  // => Se elimina esa validación por completo.
 
   const home = card.getAttribute("data-home");
   const away = card.getAttribute("data-away");
